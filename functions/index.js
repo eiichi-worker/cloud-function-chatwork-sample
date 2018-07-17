@@ -1,49 +1,51 @@
-const functions = require('firebase-functions');
-
-// // Create and Deploy Your First Cloud Functions
-// // https://firebase.google.com/docs/functions/write-firebase-functions
-//
-// exports.helloWorld = functions.https.onRequest((request, response) => {
-//  response.send("Hello from Firebase!");
-// });
-
-
-// const functions = require('firebase-functions');
-const express = require("express");
+const functions = require('firebase-functions')
+const express = require('express')
+const bodyParser = require('body-parser');
+const crypto = require('crypto')
 const postChatworkMessage = require('post-chatwork-message')
-var crypto = require('crypto');
 
-const app = express();
+const app = express()
 
-var config = require('./.env.json');
-console.log(config.chatwork.api_token);
-console.log(config.chatwork.webhook_token);
+// [Node.js express 4.xでLINE Messaging APIを利用したBOTを開発しはじめる - Qiita](https://qiita.com/kawasako3/items/79b84d344feb726ec567)
+app.use(bodyParser.json({
+  verify(req,res,buf) {
+    req.rawBody = buf.toString()
+  }
+}));
 
-var webhookSecretKey = Buffer.from(config.chatwork.webhook_token, 'base64').toString();
-console.log(webhookSecretKey);
+var config = require('./.env.json')
+// console.log(config.chatwork.api_token)
+// console.log(config.chatwork.webhook_token)
 
-const hmac = crypto.createHmac('sha256', webhookSecretKey);
-
-// // Webhook用
+// Webhook用
 app.post('/webhook', (req, res) => {
 
-    // リクエストの署名検証
-    // if (req.get('X-ChatWorkWebhookSignature') === req.query.chatwork_webhook_signature) {
-    //     const expectedSignature = hmac.update(requestBody).digest('base64');
-    //     if (expectedSignature !== req.get('X-ChatWorkWebhookSignature')) {
-    //         res.status(404)
-    //     }
-    // }
+  console.log("body")
+  console.log(req.rawBody)
+  console.log(req.body)
+  console.log("body")
 
-    postChatworkMessage(config.chatwork.api_token, 33805597, req.body)
+  if (isValidSignature(config.chatwork.webhook_token, req.get('X-ChatWorkWebhookSignature'), req.rawBody)) {
+    console.log('valid signature!!')
+    res.status(200)
+  } else {
+    console.log('not valid signature ><')
+    res.status(403)
+  }
 
-
-
-  // データを返却
-  res.send(JSON.stringify(users));
-});
+  res.send()
+})
 // postChatworkMessage(config.chatwork.api_token, 33805597, 'Hello, World')
 
+const api = functions.https.onRequest(app)
+module.exports = {api}
 
-const api = functions.https.onRequest(app);
-module.exports = { api };
+/**
+ * [チャットワークのWebhookの署名検証を各言語で実装してみた - ChatWork Creator's Note](http://creators-note.chatwork.com/entry/2017/11/22/165516)
+ */
+function isValidSignature (token, requestSignature, requestBody) {
+  const hmac = crypto.createHmac('sha256', Buffer.from(token, 'base64'))
+  const expectedSignature = hmac.update(requestBody).digest('base64')
+
+  return requestSignature === expectedSignature
+}
